@@ -1,0 +1,145 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Alfred Connection Test</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 800px;
+            margin: 50px auto;
+            padding: 20px;
+        }
+        .test {
+            margin: 20px 0;
+            padding: 15px;
+            border: 1px solid #ccc;
+            border-radius: 8px;
+        }
+        .success { background-color: #d4edda; border-color: #c3e6cb; }
+        .error { background-color: #f8d7da; border-color: #f5c6cb; }
+        button {
+            padding: 10px 20px;
+            font-size: 16px;
+            cursor: pointer;
+            background-color: #007bff;
+            color: white;
+            border: none;
+            border-radius: 4px;
+        }
+        button:hover {
+            background-color: #0056b3;
+        }
+        pre {
+            background: #f4f4f4;
+            padding: 10px;
+            overflow-x: auto;
+        }
+    </style>
+</head>
+<body>
+    <h1>Alfred Connection Test</h1>
+
+    <button onclick="runTests()">Run Tests</button>
+
+    <div id="results"></div>
+
+    <script>
+        const API_URL = 'http://localhost:8000';
+
+        async function runTests() {
+            const resultsDiv = document.getElementById('results');
+            resultsDiv.innerHTML = '<p>Running tests...</p>';
+
+            let html = '';
+
+            // Test 1: Health Check
+            html += await testHealthCheck();
+
+            // Test 2: Root Endpoint
+            html += await testRootEndpoint();
+
+            // Test 3: Execute Endpoint
+            html += await testExecuteEndpoint();
+
+            resultsDiv.innerHTML = html;
+        }
+
+        async function testHealthCheck() {
+            try {
+                const response = await fetch(`${API_URL}/health`);
+                const data = await response.json();
+                return `
+                    <div class="test success">
+                        <h3>✅ Test 1: Health Check - PASSED</h3>
+                        <pre>${JSON.stringify(data, null, 2)}</pre>
+                    </div>
+                `;
+            } catch (error) {
+                return `
+                    <div class="test error">
+                        <h3>❌ Test 1: Health Check - FAILED</h3>
+                        <p><strong>Error:</strong> ${error.message}</p>
+                        <p><strong>Possible causes:</strong></p>
+                        <ul>
+                            <li>Backend not running on port 8000</li>
+                            <li>CORS issue</li>
+                            <li>Network error</li>
+                        </ul>
+                    </div>
+                `;
+            }
+        }
+
+        async function testRootEndpoint() {
+            try {
+                const response = await fetch(`${API_URL}/`);
+                const data = await response.json();
+                return `
+                    <div class="test success">
+                        <h3>✅ Test 2: Root Endpoint - PASSED</h3>
+                        <pre>${JSON.stringify(data, null, 2)}</pre>
+                    </div>
+                `;
+            } catch (error) {
+                return `
+                    <div class="test error">
+                        <h3>❌ Test 2: Root Endpoint - FAILED</h3>
+                        <p><strong>Error:</strong> ${error.message}</p>
+                    </div>
+                `;
+            }
+        }
+
+        async function testExecuteEndpoint() {
+            try {
+                const response = await fetch(`${API_URL}/execute`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({ user_input: 'Hello Alfred' })
+                });
+                const data = await response.json();
+                return `
+                    <div class="test success">
+                        <h3>✅ Test 3: Execute Endpoint - PASSED</h3>
+                        <pre>${JSON.stringify(data, null, 2)}</pre>
+                    </div>
+                `;
+            } catch (error) {
+                return `
+                    <div class="test error">
+                        <h3>❌ Test 3: Execute Endpoint - FAILED</h3>
+                        <p><strong>Error:</strong> ${error.message}</p>
+                    </div>
+                `;
+            }
+        }
+
+        // Auto-run tests on page load
+        window.addEventListener('load', () => {
+            setTimeout(runTests, 500);
+        });
+    </script>
+</body>
+</html>
