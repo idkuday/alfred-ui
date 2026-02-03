@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { renderHook, act } from '@testing-library/react';
-import { useVoiceRecorder } from './useVoiceRecorder';
+import { useVoiceRecorder } from '../../hooks/useVoiceRecorder';
 
 // Mock the VAD library
 vi.mock('@ricky0123/vad-react', () => ({

@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { sendMessage, checkHealth, transcribeAudio, getDevices, voiceCommand } from './api';
+import { sendMessage, checkHealth, transcribeAudio, getDevices, voiceCommand } from '../../services/api';
 
 describe('API Service', () => {
   const originalFetch = global.fetch;

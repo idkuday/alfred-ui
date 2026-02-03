@@ -1,9 +1,9 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { render, screen, fireEvent, waitFor } from '@testing-library/react';
-import VoiceButton from './VoiceButton';
+import VoiceButton from '../../components/VoiceButton';
 
 // Mock the useVoiceRecorder hook
-vi.mock('../hooks/useVoiceRecorder', () => ({
+vi.mock('../../hooks/useVoiceRecorder', () => ({
   useVoiceRecorder: vi.fn(() => ({
     isListening: false,
     isSpeaking: false,
@@ -17,13 +17,13 @@ vi.mock('../hooks/useVoiceRecorder', () => ({
 }));
 
 // Mock the API functions
-vi.mock('../services/api', () => ({
+vi.mock('../../services/api', () => ({
   transcribeAudio: vi.fn(),
   voiceCommand: vi.fn(),
 }));
 
-import { useVoiceRecorder } from '../hooks/useVoiceRecorder';
-import { transcribeAudio, voiceCommand } from '../services/api';
+import { useVoiceRecorder } from '../../hooks/useVoiceRecorder';
+import { transcribeAudio, voiceCommand } from '../../services/api';
 
 describe('VoiceButton', () => {
   let mockToggle;
