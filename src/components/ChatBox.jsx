@@ -18,7 +18,7 @@ function ChatBox() {
       try {
         await checkHealth();
         setConnectionStatus('connected');
-      } catch (error) {
+      } catch {
         setConnectionStatus('disconnected');
         addSystemMessage('Cannot connect to Alfred backend. Make sure the server is running on http://localhost:8000');
       }

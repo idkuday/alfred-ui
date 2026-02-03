@@ -1,135 +1,104 @@
-import React, { useState, useRef, useEffect } from 'react';
-import { transcribeAudio } from '../services/api';
+import React, { useState, useCallback } from 'react';
+import { useVoiceRecorder } from '../hooks/useVoiceRecorder';
+import { voiceCommand, transcribeAudio } from '../services/api';
 import './VoiceButton.css';
 
 /**
- * Voice input button component
+ * Voice input button component with VAD (Voice Activity Detection)
+ * Automatically detects when speech starts and ends
+ *
  * @param {Object} props
- * @param {Function} props.onTranscription - Callback when transcription is complete
+ * @param {Function} props.onTranscription - Callback when transcription is complete (text only)
+ * @param {Function} props.onVoiceCommand - Callback when voice command completes (transcript + response)
  * @param {boolean} props.disabled - Whether button is disabled
+ * @param {boolean} props.useVoiceCommandEndpoint - If true, use /voice-command endpoint (default: false)
  */
-function VoiceButton({ onTranscription, disabled }) {
-  const [isRecording, setIsRecording] = useState(false);
+function VoiceButton({
+  onTranscription,
+  onVoiceCommand,
+  disabled,
+  useVoiceCommandEndpoint = false,
+}) {
   const [isProcessing, setIsProcessing] = useState(false);
   const [error, setError] = useState(null);
-  const mediaRecorderRef = useRef(null);
-  const audioChunksRef = useRef([]);
 
-  // Cleanup on unmount
-  useEffect(() => {
-    return () => {
-      if (mediaRecorderRef.current && isRecording) {
-        mediaRecorderRef.current.stop();
-      }
-    };
-  }, [isRecording]);
-
-  const startRecording = async () => {
-    try {
+  const handleSpeechEnd = useCallback(
+    async (audioBlob) => {
+      setIsProcessing(true);
       setError(null);
 
-      // Request microphone permission
-      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-
-      // Create MediaRecorder
-      const mediaRecorder = new MediaRecorder(stream, {
-        mimeType: 'audio/webm', // Most widely supported
-      });
-
-      mediaRecorderRef.current = mediaRecorder;
-      audioChunksRef.current = [];
-
-      // Collect audio data
-      mediaRecorder.ondataavailable = (event) => {
-        if (event.data.size > 0) {
-          audioChunksRef.current.push(event.data);
+      try {
+        if (useVoiceCommandEndpoint && onVoiceCommand) {
+          // Use voice-command endpoint for transcript + response
+          const response = await voiceCommand(audioBlob);
+          onVoiceCommand(response);
+        } else if (onTranscription) {
+          // Use transcribe endpoint for text only
+          const response = await transcribeAudio(audioBlob);
+          if (response.text) {
+            onTranscription(response.text);
+          } else {
+            setError('No transcription received');
+          }
         }
-      };
-
-      // Handle recording stop
-      mediaRecorder.onstop = async () => {
-        const audioBlob = new Blob(audioChunksRef.current, { type: 'audio/webm' });
-
-        // Stop all tracks to release microphone
-        stream.getTracks().forEach(track => track.stop());
-
-        // Process the audio
-        await processAudio(audioBlob);
-      };
-
-      // Start recording
-      mediaRecorder.start();
-      setIsRecording(true);
-    } catch (err) {
-      console.error('Error starting recording:', err);
-      if (err.name === 'NotAllowedError') {
-        setError('Microphone permission denied. Please allow access.');
-      } else if (err.name === 'NotFoundError') {
-        setError('No microphone found. Please connect a microphone.');
-      } else {
-        setError('Failed to start recording: ' + err.message);
+      } catch (err) {
+        console.error('Voice processing error:', err);
+        setError('Failed to process voice: ' + err.message);
+      } finally {
+        setIsProcessing(false);
       }
-    }
-  };
+    },
+    [onTranscription, onVoiceCommand, useVoiceCommandEndpoint]
+  );
 
-  const stopRecording = () => {
-    if (mediaRecorderRef.current && isRecording) {
-      mediaRecorderRef.current.stop();
-      setIsRecording(false);
-    }
-  };
+  const handleError = useCallback((errorMessage) => {
+    setError(errorMessage);
+  }, []);
 
-  const processAudio = async (audioBlob) => {
-    setIsProcessing(true);
-    setError(null);
+  const {
+    isListening,
+    isSpeaking,
+    error: vadError,
+    toggle,
+    isLoading: isVADLoading,
+    isVADError,
+  } = useVoiceRecorder({
+    onSpeechEnd: handleSpeechEnd,
+    onError: handleError,
+  });
 
-    try {
-      const response = await transcribeAudio(audioBlob);
-
-      if (response.text) {
-        onTranscription(response.text);
-      } else {
-        setError('No transcription received');
-      }
-    } catch (err) {
-      console.error('Transcription error:', err);
-      setError('Failed to transcribe audio: ' + err.message);
-    } finally {
-      setIsProcessing(false);
-    }
-  };
-
-  const handleClick = () => {
-    if (isRecording) {
-      stopRecording();
-    } else {
-      startRecording();
-    }
-  };
-
-  // Get button state
+  // Get button state for styling
   const getButtonState = () => {
     if (isProcessing) return 'processing';
-    if (isRecording) return 'recording';
+    if (isSpeaking) return 'speaking';
+    if (isListening) return 'listening';
     return 'idle';
   };
 
   const buttonState = getButtonState();
+  const displayError = error || vadError;
+  const isDisabled = disabled || isProcessing || isVADLoading || isVADError;
+
+  // Get button title/tooltip
+  const getTitle = () => {
+    if (isVADLoading) return 'Loading voice detection...';
+    if (isVADError) return 'Voice detection unavailable';
+    if (isProcessing) return 'Processing...';
+    if (isSpeaking) return 'Listening to your voice...';
+    if (isListening) return 'Waiting for speech... Click to cancel';
+    return 'Click to start voice input';
+  };
 
   return (
     <div className="voice-button-container">
       <button
         className={`voice-button voice-button-${buttonState}`}
-        onClick={handleClick}
-        disabled={disabled || isProcessing}
-        title={
-          isProcessing
-            ? 'Processing...'
-            : isRecording
-            ? 'Click to stop recording'
-            : 'Click to start voice input'
-        }
+        onClick={toggle}
+        disabled={isDisabled}
+        title={getTitle()}
+        aria-label={getTitle()}
       >
+        {/* Idle state - microphone icon */}
         {buttonState === 'idle' && (
           <svg
             width="20"
@@ -148,22 +117,29 @@ function VoiceButton({ onTranscription, disabled }) {
           </svg>
         )}
 
-        {buttonState === 'recording' && (
-          <div className="recording-indicator">
+        {/* Listening state - waiting for speech */}
+        {buttonState === 'listening' && (
+          <div className="listening-indicator">
+            <div className="listening-waves">
+              <span></span>
+              <span></span>
+              <span></span>
+            </div>
+          </div>
+        )}
+
+        {/* Speaking state - active voice detected */}
+        {buttonState === 'speaking' && (
+          <div className="speaking-indicator">
             <div className="pulse-dot"></div>
           </div>
         )}
 
-        {buttonState === 'processing' && (
-          <div className="spinner"></div>
-        )}
+        {/* Processing state - sending to server */}
+        {buttonState === 'processing' && <div className="spinner"></div>}
       </button>
 
-      {error && (
-        <div className="voice-error">
-          {error}
-        </div>
-      )}
+      {displayError && <div className="voice-error">{displayError}</div>}
     </div>
   );
 }

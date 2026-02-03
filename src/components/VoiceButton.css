@@ -27,24 +27,45 @@
   cursor: not-allowed;
 }
 
-/* Recording state */
-.voice-button-recording {
+/* Listening state - waiting for speech */
+.voice-button-listening {
+  background-color: #3b82f6;
+  color: white;
+  border-color: #2563eb;
+  animation: pulse-button-blue 1.5s ease-in-out infinite;
+}
+
+.voice-button-listening:hover:not(:disabled) {
+  background-color: #2563eb;
+}
+
+@keyframes pulse-button-blue {
+  0%, 100% {
+    box-shadow: 0 0 0 0 rgba(59, 130, 246, 0.7);
+  }
+  50% {
+    box-shadow: 0 0 0 8px rgba(59, 130, 246, 0);
+  }
+}
+
+/* Speaking state - voice detected */
+.voice-button-speaking {
   background-color: #ef4444;
   color: white;
   border-color: #dc2626;
-  animation: pulse-button 1.5s ease-in-out infinite;
+  animation: pulse-button-red 1s ease-in-out infinite;
 }
 
-.voice-button-recording:hover:not(:disabled) {
+.voice-button-speaking:hover:not(:disabled) {
   background-color: #dc2626;
 }
 
-@keyframes pulse-button {
+@keyframes pulse-button-red {
   0%, 100% {
     box-shadow: 0 0 0 0 rgba(239, 68, 68, 0.7);
   }
   50% {
-    box-shadow: 0 0 0 8px rgba(239, 68, 68, 0);
+    box-shadow: 0 0 0 10px rgba(239, 68, 68, 0);
   }
 }
 
@@ -55,8 +76,47 @@
   border-color: #d97706;
 }
 
-/* Recording indicator */
-.recording-indicator {
+/* Listening indicator - animated waves */
+.listening-indicator {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.listening-waves {
+  display: flex;
+  align-items: center;
+  gap: 3px;
+  height: 16px;
+}
+
+.listening-waves span {
+  width: 3px;
+  height: 8px;
+  background-color: white;
+  border-radius: 2px;
+  animation: wave 1s ease-in-out infinite;
+}
+
+.listening-waves span:nth-child(2) {
+  animation-delay: 0.15s;
+}
+
+.listening-waves span:nth-child(3) {
+  animation-delay: 0.3s;
+}
+
+@keyframes wave {
+  0%, 100% {
+    height: 8px;
+  }
+  50% {
+    height: 16px;
+  }
+}
+
+/* Speaking indicator */
+.speaking-indicator {
   display: flex;
   align-items: center;
   justify-content: center;
@@ -67,7 +127,7 @@
   height: 12px;
   background-color: white;
   border-radius: 50%;
-  animation: pulse-dot 1s ease-in-out infinite;
+  animation: pulse-dot 0.6s ease-in-out infinite;
 }
 
 @keyframes pulse-dot {
@@ -76,7 +136,7 @@
     opacity: 1;
   }
   50% {
-    transform: scale(1.2);
+    transform: scale(1.3);
     opacity: 0.8;
   }
 }

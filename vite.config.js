@@ -7,5 +7,11 @@ export default defineConfig({
   server: {
     host: '0.0.0.0', // Listen on all interfaces (IPv4 and IPv6)
     port: 5173,
-  }
+  },
+  test: {
+    globals: true,
+    environment: 'jsdom',
+    setupFiles: './src/test/setup.js',
+    css: true,
+  },
 })
