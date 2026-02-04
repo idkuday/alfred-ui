@@ -1,9 +1,9 @@
-import { useState, useCallback, useRef } from 'react';
-import { useMicVAD } from '@ricky0123/vad-react';
+import { useState, useCallback, useRef, useEffect } from 'react';
 
 /**
  * Voice recorder hook with Voice Activity Detection (VAD)
  * Automatically detects when speech starts and ends
+ * Uses @ricky0123/vad-web directly for better Vite compatibility
  *
  * @param {Object} options
  * @param {Function} options.onSpeechEnd - Callback with audio blob when speech ends
@@ -13,62 +13,100 @@ import { useMicVAD } from '@ricky0123/vad-react';
 export function useVoiceRecorder({ onSpeechEnd, onError }) {
   const [isListening, setIsListening] = useState(false);
   const [isSpeaking, setIsSpeaking] = useState(false);
+  const [isLoading, setIsLoading] = useState(false);
+  const [isVADError, setIsVADError] = useState(false);
   const [error, setError] = useState(null);
-  const startedRef = useRef(false);
+  const vadRef = useRef(null);
+  const onSpeechEndRef = useRef(onSpeechEnd);
+  const onErrorRef = useRef(onError);
 
-  // VAD configuration
-  const vad = useMicVAD({
-    startOnLoad: false,
-    onSpeechStart: () => {
-      setIsSpeaking(true);
-    },
-    onSpeechEnd: (audio) => {
-      setIsSpeaking(false);
+  // Keep refs updated
+  useEffect(() => {
+    onSpeechEndRef.current = onSpeechEnd;
+    onErrorRef.current = onError;
+  }, [onSpeechEnd, onError]);
 
-      // Convert Float32Array to WAV blob
-      const wavBlob = float32ArrayToWav(audio, 16000);
-
-      if (onSpeechEnd) {
-        onSpeechEnd(wavBlob);
+  // Cleanup on unmount
+  useEffect(() => {
+    return () => {
+      if (vadRef.current) {
+        vadRef.current.pause();
+        vadRef.current.destroy();
+        vadRef.current = null;
       }
-
-      // Auto-stop after speech ends
-      stop();
-    },
-    onVADMisfire: () => {
-      // Speech was too short, keep listening
-      console.log('VAD misfire - speech too short');
-    },
-    positiveSpeechThreshold: 0.8,
-    negativeSpeechThreshold: 0.4,
-    minSpeechFrames: 5,
-    preSpeechPadFrames: 10,
-    redemptionFrames: 8,
-  });
+    };
+  }, []);
 
   const start = useCallback(async () => {
     try {
       setError(null);
-      startedRef.current = true;
+      setIsLoading(true);
+      setIsVADError(false);
+
+      // Load the pre-bundled VAD script if not already loaded
+      if (!window.vad) {
+        await loadScript('/bundle.min.js');
+      }
+
+      // Create new VAD instance using the global vad object
+      vadRef.current = await window.vad.MicVAD.new({
+        // Use legacy model for better compatibility
+        modelURL: '/silero_vad_legacy.onnx',
+        workletURL: '/vad.worklet.bundle.min.js',
+        // ONNX runtime paths
+        onnxWASMBasePath: '/',
+        onSpeechStart: () => {
+          setIsSpeaking(true);
+        },
+        onSpeechEnd: (audio) => {
+          setIsSpeaking(false);
+
+          // Convert Float32Array to WAV blob
+          const wavBlob = float32ArrayToWav(audio, 16000);
+
+          if (onSpeechEndRef.current) {
+            onSpeechEndRef.current(wavBlob);
+          }
+
+          // Auto-stop after speech ends
+          if (vadRef.current) {
+            vadRef.current.pause();
+          }
+          setIsListening(false);
+        },
+        onVADMisfire: () => {
+          console.log('VAD misfire - speech too short');
+        },
+        positiveSpeechThreshold: 0.8,
+        negativeSpeechThreshold: 0.4,
+        minSpeechFrames: 5,
+        preSpeechPadFrames: 10,
+        redemptionFrames: 8,
+      });
+
+      setIsLoading(false);
       setIsListening(true);
-      vad.start();
+      vadRef.current.start();
     } catch (err) {
       console.error('Error starting VAD:', err);
+      setIsLoading(false);
+      setIsVADError(true);
       const errorMessage = getErrorMessage(err);
       setError(errorMessage);
       setIsListening(false);
-      if (onError) {
-        onError(errorMessage);
+      if (onErrorRef.current) {
+        onErrorRef.current(errorMessage);
       }
     }
-  }, [vad, onError]);
+  }, []);
 
   const stop = useCallback(() => {
-    startedRef.current = false;
     setIsListening(false);
     setIsSpeaking(false);
-    vad.pause();
-  }, [vad]);
+    if (vadRef.current) {
+      vadRef.current.pause();
+    }
+  }, []);
 
   const toggle = useCallback(() => {
     if (isListening) {
@@ -85,9 +123,8 @@ export function useVoiceRecorder({ onSpeechEnd, onError }) {
     start,
     stop,
     toggle,
-    // Expose VAD loading state
-    isLoading: vad.loading,
-    isVADError: vad.errored,
+    isLoading,
+    isVADError,
   };
 }
 
@@ -152,6 +189,28 @@ function getErrorMessage(err) {
     return 'Microphone is in use by another application.';
   }
   return `Voice recording error: ${err.message}`;
+}
+
+/**
+ * Load a script dynamically and wait for it to complete
+ * @param {string} src - Script URL
+ * @returns {Promise} - Resolves when script is loaded
+ */
+function loadScript(src) {
+  return new Promise((resolve, reject) => {
+    // Check if script already exists
+    const existing = document.querySelector(`script[src="${src}"]`);
+    if (existing) {
+      resolve();
+      return;
+    }
+
+    const script = document.createElement('script');
+    script.src = src;
+    script.onload = resolve;
+    script.onerror = () => reject(new Error(`Failed to load script: ${src}`));
+    document.head.appendChild(script);
+  });
 }
 
 export default useVoiceRecorder;

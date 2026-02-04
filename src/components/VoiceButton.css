@@ -69,6 +69,30 @@
   }
 }
 
+/* Loading state - VAD initializing */
+.voice-button-loading {
+  background-color: #f3f4f6;
+  color: #9ca3af;
+  border-color: #d1d5db;
+}
+
+.voice-button-loading:hover:not(:disabled) {
+  background-color: #e5e7eb;
+}
+
+.mic-loading {
+  animation: mic-pulse 1.5s ease-in-out infinite;
+}
+
+@keyframes mic-pulse {
+  0%, 100% {
+    opacity: 0.5;
+  }
+  50% {
+    opacity: 1;
+  }
+}
+
 /* Processing state */
 .voice-button-processing {
   background-color: #f59e0b;

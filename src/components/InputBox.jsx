@@ -28,9 +28,10 @@ function InputBox({ onSendMessage, disabled }) {
       onSendMessage(trimmedInput);
       setInput('');
 
-      // Reset textarea height
+      // Reset textarea height and refocus for continued typing
       if (textareaRef.current) {
         textareaRef.current.style.height = 'auto';
+        textareaRef.current.focus();
       }
     }
   };
@@ -47,6 +48,10 @@ function InputBox({ onSendMessage, disabled }) {
     // Auto-send transcribed text
     if (text && !disabled) {
       onSendMessage(text);
+      // Refocus textarea after voice input
+      if (textareaRef.current) {
+        textareaRef.current.focus();
+      }
     }
   };
 
@@ -60,7 +65,6 @@ function InputBox({ onSendMessage, disabled }) {
           value={input}
           onChange={(e) => setInput(e.target.value)}
           onKeyDown={handleKeyDown}
-          disabled={disabled}
           rows={1}
         />
         <button

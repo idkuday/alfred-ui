@@ -103,7 +103,9 @@ describe('VoiceButton', () => {
       render(<VoiceButton onTranscription={vi.fn()} />);
 
       const button = screen.getByRole('button');
-      expect(button).toBeDisabled();
+      // Button should NOT be disabled during loading - user can still click
+      expect(button).not.toBeDisabled();
+      expect(button).toHaveClass('voice-button-loading');
       expect(button).toHaveAttribute('title', 'Loading voice detection...');
     });
 
