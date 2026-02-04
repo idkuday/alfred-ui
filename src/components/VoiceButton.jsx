@@ -72,12 +72,16 @@ function VoiceButton({
     if (isProcessing) return 'processing';
     if (isSpeaking) return 'speaking';
     if (isListening) return 'listening';
+    // Show loading state when VAD is initializing (but button is still clickable)
+    if (isVADLoading) return 'loading';
     return 'idle';
   };
 
   const buttonState = getButtonState();
   const displayError = error || vadError;
-  const isDisabled = disabled || isProcessing || isVADLoading || isVADError;
+  // Don't disable for VAD loading - user can click and we'll show loading state
+  // Only disable for explicit disabled prop, processing, or VAD error
+  const isDisabled = disabled || isProcessing || isVADError;
 
   // Get button title/tooltip
   const getTitle = () => {
@@ -98,6 +102,26 @@ function VoiceButton({
         title={getTitle()}
         aria-label={getTitle()}
       >
+        {/* Loading state - VAD initializing (show mic with subtle indicator) */}
+        {buttonState === 'loading' && (
+          <svg
+            width="20"
+            height="20"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="2"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+            className="mic-loading"
+          >
+            <path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"></path>
+            <path d="M19 10v2a7 7 0 0 1-14 0v-2"></path>
+            <line x1="12" y1="19" x2="12" y2="23"></line>
+            <line x1="8" y1="23" x2="16" y2="23"></line>
+          </svg>
+        )}
+
         {/* Idle state - microphone icon */}
         {buttonState === 'idle' && (
           <svg
