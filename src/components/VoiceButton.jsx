@@ -77,7 +77,9 @@ function VoiceButton({
 
   const buttonState = getButtonState();
   const displayError = error || vadError;
-  const isDisabled = disabled || isProcessing || isVADLoading || isVADError;
+  // Don't disable during VAD loading - user can click and we'll show feedback
+  // Only disable if: parent says disabled, currently processing, or VAD failed completely
+  const isDisabled = disabled || isProcessing || isVADError;
 
   // Get button title/tooltip
   const getTitle = () => {

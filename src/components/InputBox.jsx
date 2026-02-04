@@ -28,9 +28,10 @@ function InputBox({ onSendMessage, disabled }) {
       onSendMessage(trimmedInput);
       setInput('');
 
-      // Reset textarea height
+      // Reset textarea height and refocus for continuous typing
       if (textareaRef.current) {
         textareaRef.current.style.height = 'auto';
+        textareaRef.current.focus();
       }
     }
   };

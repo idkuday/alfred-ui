@@ -90,7 +90,7 @@ describe('VoiceButton', () => {
       expect(button).toHaveAttribute('title', 'Listening to your voice...');
     });
 
-    it('should render loading state when VAD is loading', () => {
+    it('should NOT disable button when VAD is loading (user can still click)', () => {
       useVoiceRecorder.mockReturnValue({
         isListening: false,
         isSpeaking: false,
@@ -103,7 +103,8 @@ describe('VoiceButton', () => {
       render(<VoiceButton onTranscription={vi.fn()} />);
 
       const button = screen.getByRole('button');
-      expect(button).toBeDisabled();
+      // Button should NOT be disabled during loading - user can click and get feedback
+      expect(button).not.toBeDisabled();
       expect(button).toHaveAttribute('title', 'Loading voice detection...');
     });
 
