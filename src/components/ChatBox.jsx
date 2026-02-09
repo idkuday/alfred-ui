@@ -1,16 +1,18 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import MessageList from './MessageList';
 import InputBox from './InputBox';
-import { sendMessage, checkHealth } from '../services/api';
+import { sendMessage, checkHealth, getSession } from '../services/api';
 import './ChatBox.css';
 
 /**
  * Main chat container component
+ * Manages conversation sessions and message flow
  */
 function ChatBox() {
   const [messages, setMessages] = useState([]);
   const [isLoading, setIsLoading] = useState(false);
   const [connectionStatus, setConnectionStatus] = useState('checking');
+  const [sessionId, setSessionId] = useState(null);
 
   // Check backend health on mount
   useEffect(() => {
@@ -31,6 +33,23 @@ function ChatBox() {
     return () => clearInterval(interval);
   }, []);
 
+  // Restore session from sessionStorage on mount
+  useEffect(() => {
+    const savedSessionId = sessionStorage.getItem('alfred_session_id');
+    if (savedSessionId) {
+      resumeSession(savedSessionId);
+    }
+  }, []);
+
+  // Persist session ID to sessionStorage whenever it changes
+  useEffect(() => {
+    if (sessionId) {
+      sessionStorage.setItem('alfred_session_id', sessionId);
+    } else {
+      sessionStorage.removeItem('alfred_session_id');
+    }
+  }, [sessionId]);
+
   const addSystemMessage = (content) => {
     const systemMessage = {
       id: Date.now(),
@@ -40,6 +59,30 @@ function ChatBox() {
       type: 'system',
     };
     setMessages((prev) => [...prev, systemMessage]);
+  };
+
+  /**
+   * Resume an existing session by fetching its message history
+   */
+  const resumeSession = async (sid) => {
+    try {
+      const data = await getSession(sid);
+      setSessionId(sid);
+
+      // Convert backend messages to our format
+      const restoredMessages = data.messages.map((msg, index) => ({
+        id: Date.now() + index,
+        role: msg.role,
+        content: msg.content,
+        timestamp: msg.timestamp,
+      }));
+
+      setMessages(restoredMessages);
+    } catch {
+      // Session expired or not found, start fresh
+      setSessionId(null);
+      sessionStorage.removeItem('alfred_session_id');
+    }
   };
 
   const handleSendMessage = async (userInput) => {
@@ -56,8 +99,13 @@ function ChatBox() {
     setIsLoading(true);
 
     try {
-      // Send to backend
-      const response = await sendMessage(userInput);
+      // Send to backend with session ID (null on first message = backend creates one)
+      const response = await sendMessage(userInput, sessionId);
+
+      // Store session_id from response
+      if (response.session_id) {
+        setSessionId(response.session_id);
+      }
 
       // Add assistant response
       const assistantMessage = {
@@ -89,6 +137,11 @@ function ChatBox() {
       setIsLoading(false);
     }
   };
+
+  const handleNewChat = useCallback(() => {
+    setMessages([]);
+    setSessionId(null);
+  }, []);
 
   const getStatusColor = () => {
     switch (connectionStatus) {
@@ -124,12 +177,34 @@ function ChatBox() {
           <h1>Alfred</h1>
           <p className="subtitle">Smart Home AI Assistant</p>
         </div>
-        <div className="connection-status">
-          <div
-            className="status-indicator"
-            style={{ backgroundColor: getStatusColor() }}
-          />
-          <span className="status-text">{getStatusText()}</span>
+        <div className="header-actions">
+          <button
+            className="new-chat-button"
+            onClick={handleNewChat}
+            title="Start a new conversation"
+          >
+            <svg
+              width="16"
+              height="16"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="2"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+            >
+              <line x1="12" y1="5" x2="12" y2="19"></line>
+              <line x1="5" y1="12" x2="19" y2="12"></line>
+            </svg>
+            New Chat
+          </button>
+          <div className="connection-status">
+            <div
+              className="status-indicator"
+              style={{ backgroundColor: getStatusColor() }}
+            />
+            <span className="status-text">{getStatusText()}</span>
+          </div>
         </div>
       </div>
 

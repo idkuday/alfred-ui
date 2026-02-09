@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { sendMessage, checkHealth, transcribeAudio, getDevices, voiceCommand } from '../../services/api';
+import { sendMessage, checkHealth, transcribeAudio, getDevices, voiceCommand, getSessions, createSession, getSession, deleteSession } from '../../services/api';
 
 describe('API Service', () => {
   const originalFetch = global.fetch;
@@ -15,7 +15,7 @@ describe('API Service', () => {
 
   describe('sendMessage', () => {
     it('should send a message and return response', async () => {
-      const mockResponse = { response: 'Hello from Alfred' };
+      const mockResponse = { response: 'Hello from Alfred', session_id: 'abc-123' };
       global.fetch.mockResolvedValueOnce({
         ok: true,
         json: () => Promise.resolve(mockResponse),
@@ -32,6 +32,54 @@ describe('API Service', () => {
         })
       );
       expect(result).toEqual(mockResponse);
+    });
+
+    it('should include session_id in request body when provided', async () => {
+      const mockResponse = { response: 'Done', session_id: 'abc-123' };
+      global.fetch.mockResolvedValueOnce({
+        ok: true,
+        json: () => Promise.resolve(mockResponse),
+      });
+
+      await sendMessage('Turn off lights', 'abc-123');
+
+      expect(global.fetch).toHaveBeenCalledWith(
+        'http://localhost:8000/execute',
+        expect.objectContaining({
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ user_input: 'Turn off lights', session_id: 'abc-123' }),
+        })
+      );
+    });
+
+    it('should not include session_id when null', async () => {
+      const mockResponse = { response: 'Hello', session_id: 'new-123' };
+      global.fetch.mockResolvedValueOnce({
+        ok: true,
+        json: () => Promise.resolve(mockResponse),
+      });
+
+      await sendMessage('Hello', null);
+
+      expect(global.fetch).toHaveBeenCalledWith(
+        'http://localhost:8000/execute',
+        expect.objectContaining({
+          body: JSON.stringify({ user_input: 'Hello' }),
+        })
+      );
+    });
+
+    it('should parse session_id from response', async () => {
+      const mockResponse = { response: 'Hello', session_id: 'new-session-456' };
+      global.fetch.mockResolvedValueOnce({
+        ok: true,
+        json: () => Promise.resolve(mockResponse),
+      });
+
+      const result = await sendMessage('Hello');
+
+      expect(result.session_id).toBe('new-session-456');
     });
 
     it('should throw error on API failure', async () => {
@@ -173,6 +221,124 @@ describe('API Service', () => {
       });
 
       await expect(voiceCommand(audioBlob)).rejects.toThrow('Voice command error: 500');
+    });
+  });
+
+  // --- Session Management Tests ---
+
+  describe('getSessions', () => {
+    it('should return list of sessions', async () => {
+      const mockSessions = {
+        count: 2,
+        sessions: [
+          { session_id: 'abc', created_at: '2025-01-01T00:00:00', last_active: '2025-01-01T01:00:00', message_count: 4 },
+          { session_id: 'def', created_at: '2025-01-01T00:00:00', last_active: '2025-01-01T00:30:00', message_count: 2 },
+        ],
+      };
+      global.fetch.mockResolvedValueOnce({
+        ok: true,
+        json: () => Promise.resolve(mockSessions),
+      });
+
+      const result = await getSessions();
+
+      expect(global.fetch).toHaveBeenCalledWith('http://localhost:8000/sessions');
+      expect(result).toEqual(mockSessions);
+      expect(result.sessions).toHaveLength(2);
+    });
+
+    it('should throw error on failure', async () => {
+      global.fetch.mockResolvedValueOnce({
+        ok: false,
+        status: 503,
+      });
+
+      await expect(getSessions()).rejects.toThrow('Get sessions error: 503');
+    });
+  });
+
+  describe('createSession', () => {
+    it('should create a new session and return session_id', async () => {
+      const mockResponse = { session_id: 'new-session-id' };
+      global.fetch.mockResolvedValueOnce({
+        ok: true,
+        json: () => Promise.resolve(mockResponse),
+      });
+
+      const result = await createSession();
+
+      expect(global.fetch).toHaveBeenCalledWith(
+        'http://localhost:8000/sessions',
+        expect.objectContaining({ method: 'POST' })
+      );
+      expect(result.session_id).toBe('new-session-id');
+    });
+
+    it('should throw error on failure', async () => {
+      global.fetch.mockResolvedValueOnce({
+        ok: false,
+        status: 503,
+      });
+
+      await expect(createSession()).rejects.toThrow('Create session error: 503');
+    });
+  });
+
+  describe('getSession', () => {
+    it('should return session with message history', async () => {
+      const mockResponse = {
+        session: { session_id: 'abc', created_at: '2025-01-01T00:00:00', last_active: '2025-01-01T01:00:00', message_count: 2 },
+        messages: [
+          { role: 'user', content: 'Hello', timestamp: '2025-01-01T00:00:00', metadata: null },
+          { role: 'assistant', content: 'Hi there!', timestamp: '2025-01-01T00:00:01', metadata: null },
+        ],
+      };
+      global.fetch.mockResolvedValueOnce({
+        ok: true,
+        json: () => Promise.resolve(mockResponse),
+      });
+
+      const result = await getSession('abc');
+
+      expect(global.fetch).toHaveBeenCalledWith('http://localhost:8000/sessions/abc');
+      expect(result.messages).toHaveLength(2);
+      expect(result.session.session_id).toBe('abc');
+    });
+
+    it('should throw error when session not found', async () => {
+      global.fetch.mockResolvedValueOnce({
+        ok: false,
+        status: 404,
+      });
+
+      await expect(getSession('nonexistent')).rejects.toThrow('Get session error: 404');
+    });
+  });
+
+  describe('deleteSession', () => {
+    it('should delete a session and return success', async () => {
+      const mockResponse = { status: 'success', message: 'Session abc deleted' };
+      global.fetch.mockResolvedValueOnce({
+        ok: true,
+        json: () => Promise.resolve(mockResponse),
+      });
+
+      const result = await deleteSession('abc');
+
+      expect(global.fetch).toHaveBeenCalledWith(
+        'http://localhost:8000/sessions/abc',
+        expect.objectContaining({ method: 'DELETE' })
+      );
+      expect(result.status).toBe('success');
+    });
+
+    it('should throw error when session not found', async () => {
+      global.fetch.mockResolvedValueOnce({
+        ok: false,
+        status: 404,
+      });
+
+      await expect(deleteSession('nonexistent')).rejects.toThrow('Delete session error: 404');
     });
   });
 });
