@@ -1,7 +1,9 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import MessageList from './MessageList';
 import InputBox from './InputBox';
+import VoiceToggle from './VoiceToggle';
 import { sendMessage, checkHealth, getSession } from '../services/api';
+import useAudioPlayback from '../hooks/useAudioPlayback';
 import './ChatBox.css';
 
 /**
@@ -13,6 +15,10 @@ function ChatBox() {
   const [isLoading, setIsLoading] = useState(false);
   const [connectionStatus, setConnectionStatus] = useState('checking');
   const [sessionId, setSessionId] = useState(null);
+  const [voiceMode, setVoiceMode] = useState(() => {
+    return localStorage.getItem('alfred_voice_mode') === 'true';
+  });
+  const { playAudio, stopAudio, isPlaying } = useAudioPlayback();
 
   // Check backend health on mount
   useEffect(() => {
@@ -49,6 +55,21 @@ function ChatBox() {
       sessionStorage.removeItem('alfred_session_id');
     }
   }, [sessionId]);
+
+  // Persist voice mode preference to localStorage
+  useEffect(() => {
+    localStorage.setItem('alfred_voice_mode', voiceMode ? 'true' : 'false');
+  }, [voiceMode]);
+
+  const handleVoiceToggle = useCallback(() => {
+    setVoiceMode((prev) => {
+      if (prev) {
+        // Turning off — stop any playing audio
+        stopAudio();
+      }
+      return !prev;
+    });
+  }, [stopAudio]);
 
   const addSystemMessage = (content) => {
     const systemMessage = {
@@ -99,15 +120,15 @@ function ChatBox() {
     setIsLoading(true);
 
     try {
-      // Send to backend with session ID (null on first message = backend creates one)
-      const response = await sendMessage(userInput, sessionId);
+      // Send to backend with session ID and voice mode
+      const response = await sendMessage(userInput, sessionId, voiceMode);
 
       // Store session_id from response
       if (response.session_id) {
         setSessionId(response.session_id);
       }
 
-      // Add assistant response
+      // Add assistant response (text always renders regardless of voice mode)
       const assistantMessage = {
         id: Date.now() + 1,
         role: 'assistant',
@@ -115,6 +136,11 @@ function ChatBox() {
         timestamp: new Date().toISOString(),
       };
       setMessages((prev) => [...prev, assistantMessage]);
+
+      // Play audio if voice mode is on and response includes audio
+      if (voiceMode && response.audio_base64) {
+        playAudio(response.audio_base64);
+      }
 
       // Update connection status if it was disconnected
       if (connectionStatus === 'disconnected') {
@@ -198,6 +224,11 @@ function ChatBox() {
             </svg>
             New Chat
           </button>
+          <VoiceToggle
+            enabled={voiceMode}
+            onToggle={handleVoiceToggle}
+            isPlaying={isPlaying}
+          />
           <div className="connection-status">
             <div
               className="status-indicator"

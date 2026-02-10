@@ -8,13 +8,17 @@ const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000';
  * Send a message to Alfred and get a response
  * @param {string} userInput - The user's input text
  * @param {string|null} sessionId - Optional session ID for conversation continuity
- * @returns {Promise<Object>} - The response from Alfred (includes session_id)
+ * @param {boolean} voiceMode - Whether to request TTS audio in the response
+ * @returns {Promise<Object>} - The response from Alfred (includes session_id, optionally audio_base64)
  */
-export async function sendMessage(userInput, sessionId = null) {
+export async function sendMessage(userInput, sessionId = null, voiceMode = false) {
   try {
     const body = { user_input: userInput };
     if (sessionId) {
       body.session_id = sessionId;
+    }
+    if (voiceMode) {
+      body.voice_mode = true;
     }
 
     const response = await fetch(`${API_BASE_URL}/execute`, {

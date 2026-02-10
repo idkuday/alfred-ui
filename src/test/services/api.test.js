@@ -97,6 +97,52 @@ describe('API Service', () => {
 
       await expect(sendMessage('test')).rejects.toThrow('Network error');
     });
+
+    it('should include voice_mode true when voiceMode is true', async () => {
+      const mockResponse = { response: 'Hello', session_id: 'abc', audio_base64: 'AAAA' };
+      global.fetch.mockResolvedValueOnce({
+        ok: true,
+        json: () => Promise.resolve(mockResponse),
+      });
+
+      await sendMessage('Hello', 'abc', true);
+
+      expect(global.fetch).toHaveBeenCalledWith(
+        'http://localhost:8000/execute',
+        expect.objectContaining({
+          body: JSON.stringify({ user_input: 'Hello', session_id: 'abc', voice_mode: true }),
+        })
+      );
+    });
+
+    it('should not include voice_mode when voiceMode is false', async () => {
+      const mockResponse = { response: 'Hello', session_id: 'abc' };
+      global.fetch.mockResolvedValueOnce({
+        ok: true,
+        json: () => Promise.resolve(mockResponse),
+      });
+
+      await sendMessage('Hello', 'abc', false);
+
+      expect(global.fetch).toHaveBeenCalledWith(
+        'http://localhost:8000/execute',
+        expect.objectContaining({
+          body: JSON.stringify({ user_input: 'Hello', session_id: 'abc' }),
+        })
+      );
+    });
+
+    it('should parse audio_base64 from response when present', async () => {
+      const mockResponse = { response: 'Hello', session_id: 'abc', audio_base64: 'UklGRiQAAABXQVZF' };
+      global.fetch.mockResolvedValueOnce({
+        ok: true,
+        json: () => Promise.resolve(mockResponse),
+      });
+
+      const result = await sendMessage('Hello', null, true);
+
+      expect(result.audio_base64).toBe('UklGRiQAAABXQVZF');
+    });
   });
 
   describe('checkHealth', () => {
