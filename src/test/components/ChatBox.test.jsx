@@ -6,6 +6,7 @@ import ChatBox from '../../components/ChatBox';
 vi.mock('../../services/api', () => ({
   sendMessage: vi.fn(),
   checkHealth: vi.fn(),
+  getSession: vi.fn(),
 }));
 
 // Mock child components to isolate ChatBox testing
@@ -37,11 +38,12 @@ vi.mock('../../components/InputBox', () => ({
   ),
 }));
 
-import { sendMessage, checkHealth } from '../../services/api';
+import { sendMessage, checkHealth, getSession } from '../../services/api';
 
 describe('ChatBox', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    sessionStorage.clear();
   });
 
   describe('Initial Render', () => {
@@ -72,6 +74,15 @@ describe('ChatBox', () => {
       render(<ChatBox />);
 
       expect(screen.getByText('Connecting...')).toBeInTheDocument();
+    });
+
+    it('should render New Chat button', async () => {
+      checkHealth.mockResolvedValue({ status: 'healthy' });
+      render(<ChatBox />);
+
+      expect(screen.getByText('New Chat')).toBeInTheDocument();
+
+      await waitFor(() => expect(checkHealth).toHaveBeenCalled());
     });
   });
 
@@ -180,7 +191,7 @@ describe('ChatBox', () => {
 
     it('should add assistant response when API succeeds', async () => {
       checkHealth.mockResolvedValue({ status: 'healthy' });
-      sendMessage.mockResolvedValue({ text: 'Hello!' });
+      sendMessage.mockResolvedValue({ text: 'Hello!', session_id: 'sess-1' });
 
       render(<ChatBox />);
 
@@ -229,6 +240,156 @@ describe('ChatBox', () => {
       await waitFor(() => {
         expect(screen.getByText('Disconnected')).toBeInTheDocument();
       });
+    });
+  });
+
+  describe('Session Management', () => {
+    it('should pass session_id to sendMessage after first response', async () => {
+      checkHealth.mockResolvedValue({ status: 'healthy' });
+      // First call: backend returns a new session_id
+      sendMessage.mockResolvedValueOnce({ text: 'Hello!', session_id: 'sess-abc' });
+      // Second call: should include session_id
+      sendMessage.mockResolvedValueOnce({ text: 'Sure!', session_id: 'sess-abc' });
+
+      render(<ChatBox />);
+
+      await waitFor(() => {
+        expect(screen.getByText('Connected')).toBeInTheDocument();
+      });
+
+      // First message - no session_id
+      screen.getByTestId('send-button').click();
+
+      await waitFor(() => {
+        expect(sendMessage).toHaveBeenCalledWith('Test message', null);
+      });
+
+      // Wait for response to be processed
+      await waitFor(() => {
+        expect(screen.getByTestId('message-assistant')).toBeInTheDocument();
+      });
+
+      // Second message - should now include session_id
+      screen.getByTestId('send-button').click();
+
+      await waitFor(() => {
+        expect(sendMessage).toHaveBeenCalledWith('Test message', 'sess-abc');
+      });
+    });
+
+    it('should clear messages and session_id when New Chat is clicked', async () => {
+      checkHealth.mockResolvedValue({ status: 'healthy' });
+      sendMessage.mockResolvedValue({ text: 'Hello!', session_id: 'sess-abc' });
+
+      render(<ChatBox />);
+
+      await waitFor(() => {
+        expect(screen.getByText('Connected')).toBeInTheDocument();
+      });
+
+      // Send a message to populate chat
+      screen.getByTestId('send-button').click();
+
+      await waitFor(() => {
+        expect(screen.getByTestId('message-assistant')).toBeInTheDocument();
+      });
+
+      // Click New Chat
+      screen.getByText('New Chat').click();
+
+      // Messages should be cleared
+      await waitFor(() => {
+        expect(screen.queryByTestId('message-user')).not.toBeInTheDocument();
+        expect(screen.queryByTestId('message-assistant')).not.toBeInTheDocument();
+      });
+    });
+
+    it('should persist session_id to sessionStorage', async () => {
+      checkHealth.mockResolvedValue({ status: 'healthy' });
+      sendMessage.mockResolvedValue({ text: 'Hello!', session_id: 'sess-persist' });
+
+      render(<ChatBox />);
+
+      await waitFor(() => {
+        expect(screen.getByText('Connected')).toBeInTheDocument();
+      });
+
+      screen.getByTestId('send-button').click();
+
+      await waitFor(() => {
+        expect(sessionStorage.getItem('alfred_session_id')).toBe('sess-persist');
+      });
+    });
+
+    it('should clear sessionStorage when New Chat is clicked', async () => {
+      checkHealth.mockResolvedValue({ status: 'healthy' });
+      sendMessage.mockResolvedValue({ text: 'Hello!', session_id: 'sess-clear' });
+
+      render(<ChatBox />);
+
+      await waitFor(() => {
+        expect(screen.getByText('Connected')).toBeInTheDocument();
+      });
+
+      // Send message to establish session
+      screen.getByTestId('send-button').click();
+
+      await waitFor(() => {
+        expect(sessionStorage.getItem('alfred_session_id')).toBe('sess-clear');
+      });
+
+      // Click New Chat
+      screen.getByText('New Chat').click();
+
+      await waitFor(() => {
+        expect(sessionStorage.getItem('alfred_session_id')).toBeNull();
+      });
+    });
+
+    it('should resume session from sessionStorage on mount', async () => {
+      // Pre-set a session in sessionStorage
+      sessionStorage.setItem('alfred_session_id', 'saved-session');
+
+      checkHealth.mockResolvedValue({ status: 'healthy' });
+      getSession.mockResolvedValue({
+        session: { session_id: 'saved-session', created_at: '2025-01-01T00:00:00', last_active: '2025-01-01T01:00:00', message_count: 2 },
+        messages: [
+          { role: 'user', content: 'Previous question', timestamp: '2025-01-01T00:00:00' },
+          { role: 'assistant', content: 'Previous answer', timestamp: '2025-01-01T00:00:01' },
+        ],
+      });
+
+      render(<ChatBox />);
+
+      await waitFor(() => {
+        expect(getSession).toHaveBeenCalledWith('saved-session');
+      });
+
+      await waitFor(() => {
+        expect(screen.getByText('Previous question')).toBeInTheDocument();
+        expect(screen.getByText('Previous answer')).toBeInTheDocument();
+      });
+    });
+
+    it('should start fresh if saved session is expired', async () => {
+      sessionStorage.setItem('alfred_session_id', 'expired-session');
+
+      checkHealth.mockResolvedValue({ status: 'healthy' });
+      getSession.mockRejectedValue(new Error('Get session error: 404'));
+
+      render(<ChatBox />);
+
+      await waitFor(() => {
+        expect(getSession).toHaveBeenCalledWith('expired-session');
+      });
+
+      // Session should be cleared from storage
+      await waitFor(() => {
+        expect(sessionStorage.getItem('alfred_session_id')).toBeNull();
+      });
+
+      // No messages should be displayed
+      expect(screen.queryByTestId('message-user')).not.toBeInTheDocument();
     });
   });
 
