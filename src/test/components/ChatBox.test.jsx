@@ -38,12 +38,39 @@ vi.mock('../../components/InputBox', () => ({
   ),
 }));
 
+vi.mock('../../components/VoiceToggle', () => ({
+  default: ({ enabled, onToggle, isPlaying }) => (
+    <button
+      data-testid="voice-toggle"
+      aria-pressed={enabled}
+      data-playing={isPlaying ? 'true' : 'false'}
+      onClick={onToggle}
+    >
+      {enabled ? 'Voice ON' : 'Voice OFF'}
+    </button>
+  ),
+}));
+
+// Mock useAudioPlayback hook
+const mockPlayAudio = vi.fn();
+const mockStopAudio = vi.fn();
+let mockIsPlaying = false;
+vi.mock('../../hooks/useAudioPlayback', () => ({
+  default: () => ({
+    playAudio: mockPlayAudio,
+    stopAudio: mockStopAudio,
+    isPlaying: mockIsPlaying,
+  }),
+}));
+
 import { sendMessage, checkHealth, getSession } from '../../services/api';
 
 describe('ChatBox', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     sessionStorage.clear();
+    localStorage.clear();
+    mockIsPlaying = false;
   });
 
   describe('Initial Render', () => {
@@ -261,7 +288,7 @@ describe('ChatBox', () => {
       screen.getByTestId('send-button').click();
 
       await waitFor(() => {
-        expect(sendMessage).toHaveBeenCalledWith('Test message', null);
+        expect(sendMessage).toHaveBeenCalledWith('Test message', null, false);
       });
 
       // Wait for response to be processed
@@ -273,7 +300,7 @@ describe('ChatBox', () => {
       screen.getByTestId('send-button').click();
 
       await waitFor(() => {
-        expect(sendMessage).toHaveBeenCalledWith('Test message', 'sess-abc');
+        expect(sendMessage).toHaveBeenCalledWith('Test message', 'sess-abc', false);
       });
     });
 
@@ -426,6 +453,199 @@ describe('ChatBox', () => {
 
       const indicator = document.querySelector('.status-indicator');
       expect(indicator).toHaveStyle({ backgroundColor: 'rgb(245, 158, 11)' });
+    });
+  });
+
+  describe('Voice Mode Toggle', () => {
+    it('should render voice toggle button', async () => {
+      checkHealth.mockResolvedValue({ status: 'healthy' });
+      render(<ChatBox />);
+
+      expect(screen.getByTestId('voice-toggle')).toBeInTheDocument();
+      await waitFor(() => expect(checkHealth).toHaveBeenCalled());
+    });
+
+    it('should default to voice mode OFF', async () => {
+      checkHealth.mockResolvedValue({ status: 'healthy' });
+      render(<ChatBox />);
+
+      expect(screen.getByTestId('voice-toggle')).toHaveTextContent('Voice OFF');
+      expect(screen.getByTestId('voice-toggle')).toHaveAttribute('aria-pressed', 'false');
+      await waitFor(() => expect(checkHealth).toHaveBeenCalled());
+    });
+
+    it('should toggle voice mode when clicked', async () => {
+      checkHealth.mockResolvedValue({ status: 'healthy' });
+      render(<ChatBox />);
+
+      await waitFor(() => expect(checkHealth).toHaveBeenCalled());
+
+      // Click to enable
+      screen.getByTestId('voice-toggle').click();
+
+      await waitFor(() => {
+        expect(screen.getByTestId('voice-toggle')).toHaveTextContent('Voice ON');
+      });
+
+      // Click to disable
+      screen.getByTestId('voice-toggle').click();
+
+      await waitFor(() => {
+        expect(screen.getByTestId('voice-toggle')).toHaveTextContent('Voice OFF');
+      });
+    });
+
+    it('should send voice_mode true when toggle is ON', async () => {
+      checkHealth.mockResolvedValue({ status: 'healthy' });
+      sendMessage.mockResolvedValue({ text: 'Hello!', session_id: 'sess-1' });
+
+      render(<ChatBox />);
+
+      await waitFor(() => {
+        expect(screen.getByText('Connected')).toBeInTheDocument();
+      });
+
+      // Enable voice mode
+      screen.getByTestId('voice-toggle').click();
+
+      await waitFor(() => {
+        expect(screen.getByTestId('voice-toggle')).toHaveTextContent('Voice ON');
+      });
+
+      // Send a message
+      screen.getByTestId('send-button').click();
+
+      await waitFor(() => {
+        expect(sendMessage).toHaveBeenCalledWith('Test message', null, true);
+      });
+    });
+
+    it('should send voice_mode false when toggle is OFF', async () => {
+      checkHealth.mockResolvedValue({ status: 'healthy' });
+      sendMessage.mockResolvedValue({ text: 'Hello!', session_id: 'sess-1' });
+
+      render(<ChatBox />);
+
+      await waitFor(() => {
+        expect(screen.getByText('Connected')).toBeInTheDocument();
+      });
+
+      // Send a message with voice mode off (default)
+      screen.getByTestId('send-button').click();
+
+      await waitFor(() => {
+        expect(sendMessage).toHaveBeenCalledWith('Test message', null, false);
+      });
+    });
+
+    it('should call playAudio when response has audio_base64 and voice mode is ON', async () => {
+      checkHealth.mockResolvedValue({ status: 'healthy' });
+      sendMessage.mockResolvedValue({
+        text: 'Hello!',
+        session_id: 'sess-1',
+        audio_base64: 'UklGRiQAAABXQVZF',
+      });
+
+      render(<ChatBox />);
+
+      await waitFor(() => {
+        expect(screen.getByText('Connected')).toBeInTheDocument();
+      });
+
+      // Enable voice mode
+      screen.getByTestId('voice-toggle').click();
+
+      await waitFor(() => {
+        expect(screen.getByTestId('voice-toggle')).toHaveTextContent('Voice ON');
+      });
+
+      // Send a message
+      screen.getByTestId('send-button').click();
+
+      await waitFor(() => {
+        expect(mockPlayAudio).toHaveBeenCalledWith('UklGRiQAAABXQVZF');
+      });
+    });
+
+    it('should NOT call playAudio when voice mode is OFF even if audio_base64 present', async () => {
+      checkHealth.mockResolvedValue({ status: 'healthy' });
+      sendMessage.mockResolvedValue({
+        text: 'Hello!',
+        session_id: 'sess-1',
+        audio_base64: 'UklGRiQAAABXQVZF',
+      });
+
+      render(<ChatBox />);
+
+      await waitFor(() => {
+        expect(screen.getByText('Connected')).toBeInTheDocument();
+      });
+
+      // Send with voice mode off
+      screen.getByTestId('send-button').click();
+
+      await waitFor(() => {
+        expect(screen.getByTestId('message-assistant')).toBeInTheDocument();
+      });
+
+      expect(mockPlayAudio).not.toHaveBeenCalled();
+    });
+
+    it('should always render text in chat regardless of voice mode', async () => {
+      checkHealth.mockResolvedValue({ status: 'healthy' });
+      sendMessage.mockResolvedValue({
+        text: 'Hello!',
+        session_id: 'sess-1',
+        audio_base64: 'UklGRiQAAABXQVZF',
+      });
+
+      render(<ChatBox />);
+
+      await waitFor(() => {
+        expect(screen.getByText('Connected')).toBeInTheDocument();
+      });
+
+      // Enable voice mode
+      screen.getByTestId('voice-toggle').click();
+
+      // Send message
+      screen.getByTestId('send-button').click();
+
+      // Text should still render
+      await waitFor(() => {
+        expect(screen.getByTestId('message-assistant')).toBeInTheDocument();
+      });
+    });
+
+    it('should persist voice mode preference to localStorage', async () => {
+      checkHealth.mockResolvedValue({ status: 'healthy' });
+      render(<ChatBox />);
+
+      await waitFor(() => expect(checkHealth).toHaveBeenCalled());
+
+      // Enable voice mode
+      screen.getByTestId('voice-toggle').click();
+
+      await waitFor(() => {
+        expect(localStorage.getItem('alfred_voice_mode')).toBe('true');
+      });
+
+      // Disable voice mode
+      screen.getByTestId('voice-toggle').click();
+
+      await waitFor(() => {
+        expect(localStorage.getItem('alfred_voice_mode')).toBe('false');
+      });
+    });
+
+    it('should restore voice mode from localStorage on mount', async () => {
+      localStorage.setItem('alfred_voice_mode', 'true');
+      checkHealth.mockResolvedValue({ status: 'healthy' });
+
+      render(<ChatBox />);
+
+      expect(screen.getByTestId('voice-toggle')).toHaveTextContent('Voice ON');
+      await waitFor(() => expect(checkHealth).toHaveBeenCalled());
     });
   });
 });
