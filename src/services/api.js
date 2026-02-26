@@ -100,33 +100,6 @@ export async function getDevices() {
   }
 }
 
-/**
- * Send audio for voice command processing
- * This endpoint transcribes audio and executes the command in one call
- * @param {Blob} audioBlob - The audio blob to process
- * @returns {Promise<Object>} - Object with transcript and Alfred's response
- */
-export async function voiceCommand(audioBlob) {
-  try {
-    const formData = new FormData();
-    formData.append('file', audioBlob, 'audio.wav');
-
-    const response = await fetch(`${API_BASE_URL}/voice-command`, {
-      method: 'POST',
-      body: formData,
-    });
-
-    if (!response.ok) {
-      throw new Error(`Voice command error: ${response.status}`);
-    }
-
-    return await response.json();
-  } catch (error) {
-    console.error('Voice command error:', error);
-    throw error;
-  }
-}
-
 // --- Session Management ---
 
 /**

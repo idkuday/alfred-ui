@@ -19,11 +19,10 @@ vi.mock('../../hooks/useVoiceRecorder', () => ({
 // Mock the API functions
 vi.mock('../../services/api', () => ({
   transcribeAudio: vi.fn(),
-  voiceCommand: vi.fn(),
 }));
 
 import { useVoiceRecorder } from '../../hooks/useVoiceRecorder';
-import { transcribeAudio, voiceCommand } from '../../services/api';
+import { transcribeAudio } from '../../services/api';
 
 describe('VoiceButton', () => {
   let mockToggle;
@@ -277,47 +276,6 @@ describe('VoiceButton', () => {
 
       await waitFor(() => {
         expect(screen.getByText('No transcription received')).toBeInTheDocument();
-      });
-    });
-  });
-
-  describe('Voice command flow', () => {
-    it('should call onVoiceCommand when using voice command endpoint', async () => {
-      const onVoiceCommand = vi.fn();
-      let onSpeechEndHandler;
-
-      useVoiceRecorder.mockImplementation(({ onSpeechEnd }) => {
-        onSpeechEndHandler = onSpeechEnd;
-        return {
-          isListening: false,
-          isSpeaking: false,
-          error: null,
-          toggle: mockToggle,
-          isLoading: false,
-          isVADError: false,
-        };
-      });
-
-      const mockResponse = {
-        transcript: 'Turn on the lights',
-        response: 'Turning on the lights',
-      };
-      voiceCommand.mockResolvedValue(mockResponse);
-
-      render(
-        <VoiceButton
-          onVoiceCommand={onVoiceCommand}
-          useVoiceCommandEndpoint={true}
-        />
-      );
-
-      // Simulate speech end
-      const audioBlob = new Blob(['test'], { type: 'audio/wav' });
-      await onSpeechEndHandler(audioBlob);
-
-      await waitFor(() => {
-        expect(voiceCommand).toHaveBeenCalledWith(audioBlob);
-        expect(onVoiceCommand).toHaveBeenCalledWith(mockResponse);
       });
     });
   });

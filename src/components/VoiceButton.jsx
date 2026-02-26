@@ -1,6 +1,6 @@
 import React, { useState, useCallback } from 'react';
 import { useVoiceRecorder } from '../hooks/useVoiceRecorder';
-import { voiceCommand, transcribeAudio } from '../services/api';
+import { transcribeAudio } from '../services/api';
 import './VoiceButton.css';
 
 /**
@@ -9,15 +9,11 @@ import './VoiceButton.css';
  *
  * @param {Object} props
  * @param {Function} props.onTranscription - Callback when transcription is complete (text only)
- * @param {Function} props.onVoiceCommand - Callback when voice command completes (transcript + response)
  * @param {boolean} props.disabled - Whether button is disabled
- * @param {boolean} props.useVoiceCommandEndpoint - If true, use /voice-command endpoint (default: false)
  */
 function VoiceButton({
   onTranscription,
-  onVoiceCommand,
   disabled,
-  useVoiceCommandEndpoint = false,
 }) {
   const [isProcessing, setIsProcessing] = useState(false);
   const [error, setError] = useState(null);
@@ -28,12 +24,7 @@ function VoiceButton({
       setError(null);
 
       try {
-        if (useVoiceCommandEndpoint && onVoiceCommand) {
-          // Use voice-command endpoint for transcript + response
-          const response = await voiceCommand(audioBlob);
-          onVoiceCommand(response);
-        } else if (onTranscription) {
-          // Use transcribe endpoint for text only
+        if (onTranscription) {
           const response = await transcribeAudio(audioBlob);
           if (response.text) {
             onTranscription(response.text);
@@ -48,7 +39,7 @@ function VoiceButton({
         setIsProcessing(false);
       }
     },
-    [onTranscription, onVoiceCommand, useVoiceCommandEndpoint]
+    [onTranscription]
   );
 
   const handleError = useCallback((errorMessage) => {
