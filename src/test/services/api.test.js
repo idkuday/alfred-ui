@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { sendMessage, checkHealth, transcribeAudio, getDevices, voiceCommand, getSessions, createSession, getSession, deleteSession } from '../../services/api';
+import { sendMessage, checkHealth, transcribeAudio, getDevices, getSessions, createSession, getSession, deleteSession } from '../../services/api';
 
 describe('API Service', () => {
   const originalFetch = global.fetch;
@@ -227,46 +227,6 @@ describe('API Service', () => {
       });
 
       await expect(getDevices()).rejects.toThrow('Get devices error: 500');
-    });
-  });
-
-  describe('voiceCommand', () => {
-    it('should send audio and return transcript with response', async () => {
-      const mockVoiceResponse = {
-        transcript: 'Turn on the lights',
-        response: 'Turning on the lights',
-      };
-      const audioBlob = new Blob(['audio data'], { type: 'audio/wav' });
-
-      global.fetch.mockResolvedValueOnce({
-        ok: true,
-        json: () => Promise.resolve(mockVoiceResponse),
-      });
-
-      const result = await voiceCommand(audioBlob);
-
-      expect(global.fetch).toHaveBeenCalledWith(
-        'http://localhost:8000/voice-command',
-        expect.objectContaining({
-          method: 'POST',
-        })
-      );
-
-      // Check that FormData was sent
-      const call = global.fetch.mock.calls[0];
-      expect(call[1].body).toBeInstanceOf(FormData);
-
-      expect(result).toEqual(mockVoiceResponse);
-    });
-
-    it('should throw error on voice command failure', async () => {
-      const audioBlob = new Blob(['audio data'], { type: 'audio/wav' });
-      global.fetch.mockResolvedValueOnce({
-        ok: false,
-        status: 500,
-      });
-
-      await expect(voiceCommand(audioBlob)).rejects.toThrow('Voice command error: 500');
     });
   });
 
